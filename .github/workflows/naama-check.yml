@@ -1,0 +1,58 @@
+name: Check Naama mobile deck
+on:
+  push:
+    branches: [naama-job-match-20261123]
+    paths: ['.github/workflows/naama-check.yml']
+permissions:
+  contents: read
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install selenium requests beautifulsoup4
+      - shell: python
+        run: |
+          import json,re,threading,concurrent.futures
+          from http.server import ThreadingHTTPServer,SimpleHTTPRequestHandler
+          from selenium import webdriver
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+          import requests
+          from bs4 import BeautifulSoup
+          threading.Thread(target=ThreadingHTTPServer(('127.0.0.1',8100),SimpleHTTPRequestHandler).serve_forever,daemon=True).start()
+          opts=webdriver.ChromeOptions()
+          for flag in ['--headless','--no-sandbox','--window-size=390,844']: opts.add_argument(flag)
+          d=webdriver.Chrome(options=opts)
+          d.get('http://127.0.0.1:8100/naama/matches.html')
+          jobs=d.execute_script('return jobs.map(j=>[j.id,j.url])')
+          def inspect(job):
+           i,u=job
+           try:
+            res=requests.get(u,timeout=12)
+            soup=BeautifulSoup(res.content,'html.parser')
+            date=re.search(r'"datePosted"\s*:\s*"([0-9-]{10})',res.text)
+            print('POSTDATE',i,date.group(1) if date else '-',res.status_code,flush=True)
+           except Exception: print('POSTDATE',i,'- unavailable',flush=True)
+          with concurrent.futures.ThreadPoolExecutor(12) as ex: list(ex.map(inspect,jobs))
+          def el(i): return d.find_element(By.ID,i)
+          first=el('applyBtn').get_attribute('href')
+          el('skipBtn').click()
+          WebDriverWait(d,4).until(lambda _:el('applyBtn').get_attribute('href')!=first)
+          second=el('applyBtn').get_attribute('href')
+          el('saveBtn').click()
+          el('savedTab').click()
+          a=d.find_element(By.CSS_SELECTOR,'.apply-link')
+          assert a.get_attribute('href')==second
+          a.click()
+          WebDriverWait(d,8).until(lambda _:len(d.window_handles)>1)
+          d.switch_to.window(d.window_handles[0])
+          d.refresh()
+          el('savedTab').click()
+          assert d.find_element(By.CSS_SELECTOR,'.apply-link').get_attribute('href')==second
+          d.find_element(By.CSS_SELECTOR,'.remove').click()
+          assert el('navCount').text=='0'
+          el('backToDiscover').click()
+          for b in d.find_elements(By.CSS_SELECTOR,'.filter[data-filter]'): b.click()
+          print('PASS: skip, save, shortlist, application tab, reload persistence, remove, discover, category buttons')
+          d.quit()
