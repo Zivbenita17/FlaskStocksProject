@@ -35,12 +35,12 @@ jobs:
               company,slug=u.split('smartrecruiters.com/')[1].split('/')[:2]
               doc=requests.get('https://api.smartrecruiters.com/v1/companies/'+company+'/postings/'+slug.split('-')[0],timeout=8).json()
               print('API_DATE',i,str(doc.get('releasedDate',''))[:10],flush=True)
-             if 'greenhouse.io/' in u:
+            if 'greenhouse.io/' in u:
               board=u.split('greenhouse.io/')[1].split('/')[0]
               host='boards-api.eu.greenhouse.io' if '.eu.greenhouse' in u else 'boards-api.greenhouse.io'
               doc=requests.get('https://'+host+'/v1/boards/'+board+'/jobs/'+u.split('/jobs/')[1].split('?')[0],timeout=8).json()
               print('API_DATE',i,str(doc.get('first_published',''))[:10],flush=True)
-             date=re.search(r'"datePosted"\s*:\s*"([0-9-]{10})',res.text)
+            date=re.search(r'"datePosted"\s*:\s*"([0-9-]{10})',res.text)
             print('POSTDATE',i,date.group(1) if date else '-',res.status_code,flush=True)
            except Exception: print('POSTDATE',i,'- unavailable',flush=True)
           with concurrent.futures.ThreadPoolExecutor(12) as ex: list(ex.map(inspect,jobs))
