@@ -1,0 +1,48 @@
+name: Verify resume upload
+on:
+  push:
+    branches: [naama-job-match-20261123]
+    paths: ['.github/workflows/upload-check.yml']
+permissions:
+  contents: read
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install selenium python-docx reportlab
+      - shell: python
+        run: |
+          import threading, pathlib, tempfile
+          from http.server import ThreadingHTTPServer,SimpleHTTPRequestHandler
+          from selenium import webdriver
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+          from docx import Document
+          from reportlab.pdfgen.canvas import Canvas
+          threading.Thread(target=ThreadingHTTPServer(('127.0.0.1',8110),SimpleHTTPRequestHandler).serve_forever,daemon=True).start()
+          opts=webdriver.ChromeOptions()
+          for f in ['--headless','--no-sandbox','--window-size=390,844']: opts.add_argument(f)
+          d=webdriver.Chrome(options=opts)
+          d.get('http://localhost:8110/naama/upload.html')
+          el=lambda i:d.find_element(By.ID,i)
+          el('uploadResume').click()
+          folder=pathlib.Path(tempfile.mkdtemp())
+          for ext in ['txt','docx','pdf']:
+              s='Sample Engineer '+ext
+              path=folder/('resume.'+ext)
+              if ext=='txt': path.write_text(s)
+              elif ext=='docx':
+                  doc=Document();doc.add_paragraph(s);doc.save(path)
+              else:
+                  c=Canvas(str(path));c.drawString(40,700,s);c.save()
+              el('fileCV').send_keys(str(path))
+              WebDriverWait(d,45).until(lambda _:s in el('draftCV').get_attribute('value'))
+              print('UPLOAD PASS',ext,flush=True)
+          el('closeCV').click()
+          b=d.find_element(By.CSS_SELECTOR,'#jobCard [data-cv-job]')
+          d.execute_script("arguments[0].scrollIntoView({block:'center',behavior:'instant'})",b)
+          b.click()
+          assert el('cvStudio').is_displayed()
+          print('CARD PASS')
+          d.quit()
